@@ -1,0 +1,368 @@
+---
+title: "R Notebook"
+output:
+  html_document:
+    df_print: paged
+---
+
+Problem 1 -
+
+```{r}
+library(dplyr)
+library(readr)
+library(ggplot2)
+library(tidyverse)
+library(ISLR)
+library(caret)
+library(class)
+library(gmodels)
+```
+
+
+
+```{r}
+#importing the dataset in r 
+setwd("C:/Users/arush/Desktop/Fall 19/DA5030/Practicums/Practicum1")
+
+data <- read.csv("Glass.csv",header = T, stringsAsFactors = F) 
+
+
+```
+
+3. Na column histogram
+```{r}
+x <- data$Na
+h<-hist(x, breaks=10, col="magenta", xlab="Na values",
+   main="Histogram with Normal Curve")
+xfit<-seq(min(x),max(x),length=214)
+yfit<-dnorm(xfit,mean=mean(x),sd=sd(x))
+yfit <- yfit*diff(h$mids[1:2])*length(x)
+lines(xfit, yfit, col="blue", lwd=2)
+
+#From the below plot it can be observed that the data for Na is normally distributed 
+```
+
+4.
+```{r}
+#The k-NN algorithm does not require any normally distributed data. 
+#It makes no assumptions about the underlying distribution of the data
+#A non-parametric method implies that the number of parameters associated with the model are not fixed and that is what makes k-NN algorithm non-parametric since the number of parameters is associated with each instance in the training data set 
+```
+
+
+5.
+```{r}
+#Creating a new dataset without ID column
+data2 <- data[,c(2:11)]
+
+#Normalising all features except the type of glass column
+
+for (i in 1:(ncol(data2)-1)) {
+  data2[,i] <- (data2[,i]-mean(data2[,i]))/sd(data2[,i])
+  }
+summary(data2)
+
+```
+
+6. Stratified Sampling 
+```{r}
+#Randomizing the dataset
+data3 <- data2
+set.seed(10)
+gp <- runif(nrow(data3))
+data3 <- data3[order(gp),]
+#Stratified sampling using Caret package based on the type of glass
+sampling <- createDataPartition(y = data3$Type_of_glass,p = 0.60,list = FALSE)
+training <- data3[sampling,]
+validation <- data3[-sampling,]
+table(training$Type_of_glass)
+
+```
+
+7. k-NN function
+```{r}
+#normalized data set without new values
+data4 <- data[,c(2:11)]
+for (i in 1:(ncol(data4)-1)) {
+  data4[,i] <- (data4[,i]-mean(data4[,i]))/sd(data4[,i])
+}
+summary(data4)
+
+#normalizing the new values
+a <- c( 1.51721,12.53,3.48,1.39,73.39,0.60,8.55,0.00,0.08)
+an <- 0
+for (i in 1:9) {
+  an[i] <- (a[i]-mean(data[,i+1]))/sd(data[,i+1])
+  
+}
+
+b <- c(1.4893,12.71,1.85,1.81,72.62,0.52,10.01,0.00,0.03)
+bn <- 0
+for (i in 1:9) {
+  bn[i] <- (b[i]-mean(data[,i+1]))/sd(data[,i+1])
+  
+}
+
+```
+
+```{r}
+#Distance function 
+
+dist <- function(p,q){
+    d <- 0
+  for(i in 1:length(q)){
+    d <- d+(p[i]-q[i])^2          
+  }
+  dist <- sqrt(d)
+}
+
+```
+
+```{r}
+#Function for finding the distance between each point
+neighbors <- function (training, unknown)
+{
+   m <- nrow(training)
+   ds <- numeric(m)
+   q <- unknown
+   for (i in 1:m) {
+     p <- training[i,c(1:9)]
+     ds[i] <- dist(p,q)
+   }
+   neighbors <- ds
+}
+
+```
+
+
+```{r}
+#Function for finding k smallest distances
+k.closest <- function(neighbors,k)
+{
+  ordered.neighbors <- order(unlist(neighbors))
+  k.closest <- ordered.neighbors[1:k]
+}
+
+```
+
+```{r}
+#Mode function
+Mode <- function(x) 
+{
+  ux <- unique(x)
+  ux[which.max(tabulate(match(x, ux)))]
+}
+```
+
+```{r}
+#kNN function
+
+kNN <- function(training,unknown,k){
+   nb <- neighbors(training,unknown)
+  f <- k.closest(nb,k)
+  kNN <- Mode(training[f,10])
+}
+
+```
+
+```{r}
+#Glass type of unknown cases
+case1 <- kNN(data4,an,6)
+case1
+
+case2 <- kNN(data4,bn,6)
+case2
+
+#Glass type for both the cases is 1
+
+```
+
+
+8.knn function from Class package
+```{r}
+AP <- knn(train=data4[,c(1:9)],test=an,cl=data4$Type_of_glass,k=6)
+BP <- knn(train=data4[,c(1:9)],test=bn,cl=data4$Type_of_glass,k=6)
+AP
+BP
+
+#Comparison- For the first case, the glass type turns out to be 1 from the manually built knn function and the inbuilt knn function both
+#For the second case the glass type turns out to be 1 from the manual function and 2 from the builtin function
+```
+
+
+9.k vs Error Rate
+```{r}
+#knn for k from 2 to 10, with training being training data and validation being testing data 
+validation2 <- validation
+validation2[,c(11:19)] <- 0
+for (j in 2:10) {
+  k <- j
+for (i in 1:nrow(validation)) {
+validation2[i,9+j] <- kNN(training,validation[i,-10],k)
+}
+validation2[,18+j] <- 0
+for (i in 1:nrow(validation)) {
+  if((validation2[i,10]-validation2[i,9+j])==0){
+    validation2[i,18+j] <- 1
+  }else{
+    validation2[i,18+j] <- 0
+  }}}
+
+#Getting the %error for each case of k
+n <- numeric(9)
+error <- numeric(9)
+for(i in 2:10){
+n[i-1] <- validation2%>%
+  filter(validation2[,18+i]==0)%>%
+  tally()  
+error[i-1] <-  (unlist(n[i-1])/nrow(validation))*100
+}
+
+e <- as.data.frame(error)
+e[,2] <- c(2:10)
+
+#Plot of k vs error values
+ggplot(data=e)+
+  geom_line(mapping=aes(x=V2,y=error,color=V2))+
+  xlab("k")+
+  ylab("Error Rate")
+
+```
+
+10.
+```{r}
+#Predicting the glass type by taking the entire normalized dataset as the testing data and the same dataset as the training data, with k=6 
+CT <- knn(train = data4[,c(1:9)],test = data4[c(1:9)],cl=data4$Type_of_glass,k=6)
+CrossTable(x=data4$Type_of_glass,y=CT,prop.chisq = F)
+```
+
+
+Problem2-
+
+2.
+```{r}
+kc <- read.csv("kc_house_data.csv",header = T,stringsAsFactors = F)
+target_data <- kc[,3]
+train_data <- kc[,-c(1,2,3,16,17,18,19,20,21)]
+
+```
+
+3.
+```{r}
+#Normalizing values except waterfont and view
+for (i in c(1,2,3,4,5,8,9,10,11,12)) {
+train_data[,i] <- (train_data[,i]-min(train_data[,i]))/(max(train_data[,i])-min(train_data[,i]))
+}
+
+#normalizing the view boolean values
+train_data[,c(13:16)] <- 0
+
+for (i in 1:nrow(train_data)) {
+if(train_data[i,7]==0){
+  train_data[i,13] <- 1
+  train_data[i,14] <- 0
+  train_data[i,15] <- 0
+  train_data[i,16] <- 0
+}else if(train_data[i,7]==1){
+  train_data[i,13] <- 0
+  train_data[i,14] <- 1
+  train_data[i,15] <- 0
+  train_data[i,16] <- 0
+}else if(train_data[i,7]==2){
+  train_data[i,13] <- 0
+  train_data[i,14] <- 0
+  train_data[i,15] <- 1
+  train_data[i,16] <- 0
+}else if(train_data[i,7]==3){
+  train_data[i,13] <- 0
+  train_data[i,14] <- 0
+  train_data[i,15] <- 0
+  train_data[i,16] <- 1
+}else{
+  train_data[i,13] <- 0
+  train_data[i,14] <- 0
+  train_data[i,15] <- 0
+  train_data[i,16] <- 0  
+}}
+
+#Removing View feature from the dataset
+train_data <- train_data[,-7]
+summary(train_data)
+
+```
+
+4.kNN function
+```{r}
+#Distance function 
+
+dist <- function(p,q){
+    d <- 0
+  for(i in 1:length(p)){
+    d <- d+(p[i]-q[i])^2          
+  }
+  dist <- sqrt(d)
+}
+```
+
+```{r}
+#Function for finding the distance between each point
+neighbors <- function (training,unknown)
+{
+  ds <- 0
+   unknown <- new_data
+   for (i in 1:nrow(train_data)) {
+     training <- train_data[i,]
+     ds[i] <- dist(training,unknown)
+   }
+   neighbors <- ds
+}
+```
+
+```{r}
+#Function for finding k smallest distances
+k.closest <- function(neighbors,k)
+{
+  ordered.neighbors <- order(unlist(neighbors))
+  k.closest <- ordered.neighbors[1:k]
+}
+```
+
+```{r}
+#kNN function
+
+knn.reg <- function(new_data,target_data,train_data,k){
+   nb <- neighbors(train_data,new_data)
+  f <- k.closest(nb,k)
+  knn.reg <- weighted.mean(target_data[f],c(3,2,1,1))
+}
+
+```
+
+5. Forecasting
+```{r}
+#new data
+new <- c(4,3,4852,10244,3,0,1,3,11,1960,820,1978)
+
+#normalizing the new data(without booleans)
+tr <- kc[,-c(1,2,3,16,17,18,19,20,21)]
+for (i in c(1,2,3,4,5,8,9,10,11,12)) {
+  new[i] <- (new[i]-min(tr[,i]))/(max(tr[,i])-min(tr[,i]))
+}
+#normalizing boolean values of View
+new[c(13:16)] <- 0
+new[13] <- 0
+new[14] <- 1
+new[15] <- 0
+new[16] <- 0
+
+new_data <- new[-7]
+
+```
+
+```{r}
+#Forecast with k=4
+forecast <- knn.reg(new_data,target_data,train_data,4)
+forecast
+
+```
+
